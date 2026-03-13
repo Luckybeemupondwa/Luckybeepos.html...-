@@ -1,0 +1,157 @@
+<!DOCTYPE html><html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucky Bee POS 6.2 PRO</title><style>
+body{font-family:Arial;margin:0;background:#eef2f7;font-size:14px;}
+header{background:#111827;color:white;padding:14px;text-align:center;font-size:18px;font-weight:bold;}
+.container{max-width:900px;margin:auto;padding:12px;}
+.card{background:white;padding:15px;border-radius:10px;margin-bottom:15px;box-shadow:0 3px 10px rgba(0,0,0,0.1);}
+h3{font-size:16px;margin-top:0}
+input{width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid #ccc;font-size:14px;}
+button{padding:10px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;margin:4px;color:white;font-size:13px;}
+.loginBtn{background:#2563eb;width:100%}
+.invBtn{background:#2563eb}
+.sellBtn{background:#16a34a}
+.salesBtn{background:#f59e0b}
+.logoutBtn{background:#dc2626}
+.backBtn{background:#6b7280}
+.dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;}
+.productBtn{background:#2563eb;padding:12px;border-radius:8px;}
+.cartItem{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:6px;}
+.checkoutBtn{background:#16a34a;width:100%;font-size:15px;}
+.lowStock{color:red;font-weight:bold;}
+#dashboard,#inventoryPage,#posPage,#salesPage,#reportPage{display:none;}
+</style><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script></head><body>
+<header>🐝 Lucky Bee POS 6.2 PRO</header>
+<div class="container"><!-- LOGIN PAGE --><div id="loginPage" class="card">
+<h3>Login</h3>
+<input id="username" placeholder="Username">
+<input id="password" type="password" placeholder="Password">
+<button class="loginBtn" onclick="login()">Login</button>
+<p>Admin: admin / 1234<br>Cashier: cashier / 1111</p>
+</div><!-- DASHBOARD --><div id="dashboard" class="card">
+<h3>Sales Dashboard</h3>
+<p>Total Products: <span id="totalProducts">0</span></p>
+<p>Total Sales: <span id="totalSales">0</span></p>
+<canvas id="salesChart"></canvas>
+<div class="dashboard">
+<button class="invBtn" onclick="showInventory()">Inventory</button>
+<button class="sellBtn" onclick="showPOS()">Start Selling</button>
+<button class="salesBtn" onclick="showSales()">Sales</button>
+<button class="salesBtn" onclick="showReports()">Reports</button>
+<button class="logoutBtn" onclick="logout()">Logout</button>
+</div>
+</div><!-- INVENTORY PAGE --><div id="inventoryPage" class="card">
+<button class="backBtn" onclick="showDashboard()">Back</button>
+<h3>Add Product</h3>
+<input id="pname" placeholder="Product name">
+<input id="pprice" placeholder="Price">
+<input id="pqty" placeholder="Quantity">
+<button class="invBtn" onclick="addProduct()" id="addBtn">Add Product</button>
+<h3>Inventory</h3>
+<div id="inventoryList"></div>
+</div><!-- POS / SELL PAGE --><div id="posPage" class="card">
+<button class="backBtn" onclick="showDashboard()">Back</button>
+<h3>Search Product</h3>
+<input id="searchProduct" placeholder="Search..." onkeyup="searchProduct()">
+<h3>Products</h3>
+<div id="productButtons" class="products"></div>
+<h3>Cart</h3>
+<div id="cartList"></div>
+<h3>Total: K <span id="totalValue">0</span></h3>
+<button class="checkoutBtn" onclick="checkout()">CHECKOUT</button>
+<button class="salesBtn" onclick="printReceipt()">PRINT RECEIPT</button>
+<button class="salesBtn" onclick="downloadPDF()">DOWNLOAD RECEIPT PDF</button>
+</div><!-- SALES HISTORY PAGE --><div id="salesPage" class="card">
+<button class="backBtn" onclick="showDashboard()">Back</button>
+<h3>Sales History</h3>
+<div id="salesList"></div>
+</div><!-- REPORT PAGE --><div id="reportPage" class="card">
+<button class="backBtn" onclick="showDashboard()">Back</button>
+<h3>Sales Reports</h3>
+<p>Daily Total: K <span id="dailyTotal">0</span></p>
+<p>Weekly Total: K <span id="weeklyTotal">0</span></p>
+</div><script>
+const users={admin:"1234",cashier:"1111"}
+let inventory=JSON.parse(localStorage.getItem("inventory"))||[]
+let sales=JSON.parse(localStorage.getItem("sales"))||[]
+let cart=[]
+let lastReceipt=[]
+let role=""
+
+function saveData(){
+localStorage.setItem("inventory",JSON.stringify(inventory))
+localStorage.setItem("sales",JSON.stringify(sales))
+}
+
+function login(){
+let u=username.value.trim()
+let p=password.value.trim()
+if(users[u]===p){
+role=u==="admin"?"admin":"cashier"
+loginPage.style.display="none"
+dashboard.style.display="block"
+updateDashboard()
+loadInventory()
+loadProducts()
+loadSales()
+drawChart()
+document.getElementById("addBtn").style.display=role==="admin"?"block":"none"
+}else{alert("Wrong login")}
+}
+
+function logout(){location.reload()}
+function hideAll(){inventoryPage.style.display="none";posPage.style.display="none";salesPage.style.display="none";dashboard.style.display="none";reportPage.style.display="none"}
+function showDashboard(){hideAll();dashboard.style.display="block";drawChart()}
+function showInventory(){hideAll();inventoryPage.style.display="block"}
+function showPOS(){hideAll();posPage.style.display="block"}
+function showSales(){hideAll();salesPage.style.display="block"}
+function showReports(){hideAll();reportPage.style.display="block";updateReports()}
+
+function updateDashboard(){totalProducts.innerText=inventory.length;totalSales.innerText=sales.length}
+
+function addProduct(){
+if(role!=="admin"){alert("Only admin can add products");return;}
+inventory.push({name:pname.value,price:parseFloat(pprice.value),qty:parseInt(pqty.value)})
+saveData();loadInventory();loadProducts();updateDashboard()
+}
+
+function loadInventory(){
+inventoryList.innerHTML=""
+inventory.forEach((p,i)=>{
+let low=p.qty<=5?"<span class='lowStock'>LOW STOCK</span>":""
+inventoryList.innerHTML+=p.name+" | K"+p.price+" | "+p.qty+" "+low+
+(role==="admin"?` <button onclick='deleteProduct(${i})'>Delete</button>`:"")+
+"<br>"
+})
+}
+
+function deleteProduct(i){inventory.splice(i,1);saveData();loadInventory();loadProducts();updateDashboard()}
+
+function loadProducts(){productButtons.innerHTML="";inventory.forEach((p,i)=>{if(p.qty>0){let btn=document.createElement("button");btn.className="productBtn";btn.innerText=p.name+" K"+p.price;btn.onclick=function(){addToCart(i)};productButtons.appendChild(btn)}})}
+
+function searchProduct(){let q=searchProduct.value.toLowerCase();productButtons.innerHTML="";inventory.forEach((p,i)=>{if(p.name.toLowerCase().includes(q)&&p.qty>0){let btn=document.createElement("button");btn.className="productBtn";btn.innerText=p.name+" K"+p.price;btn.onclick=function(){addToCart(i)};productButtons.appendChild(btn)}})}
+
+function addToCart(i){let item=inventory[i];let found=cart.find(c=>c.index===i);if(found){found.qty++}else{cart.push({index:i,name:item.name,price:item.price,qty:1})}renderCart()}
+
+function renderCart(){cartList.innerHTML="";let total=0;cart.forEach((c,i)=>{let sub=c.price*c.qty;total+=sub;cartList.innerHTML+="<div class='cartItem'>"+c.name+" x"+c.qty+" K"+sub+" <button onclick='removeItem("+i+")'>X</button></div>"});totalValue.innerText=total}
+
+function removeItem(i){cart.splice(i,1);renderCart()}
+
+function checkout(){if(cart.length===0){alert("Cart empty");return}let total=0;lastReceipt=[...cart];cart.forEach(item=>{inventory[item.index].qty-=item.qty;total+=item.price*item.qty});sales.push(total);cart=[];saveData();renderCart();loadProducts();loadSales();updateDashboard();drawChart();alert("Sale completed. Receipt ready for print/download.")}
+
+function loadSales(){salesList.innerHTML="";sales.forEach((s,i)=>{salesList.innerHTML+="Sale "+(i+1)+" K"+s+"<br>"})}
+
+function printReceipt(){if(lastReceipt.length===0){alert("No receipt");return}let w=window.open("","Receipt","width=300,height=500");let total=0;w.document.write("<h3>Lucky Bee Shop</h3><hr>");lastReceipt.forEach(c=>{let sub=c.price*c.qty;total+=sub;w.document.write(c.name+" x"+c.qty+" = K"+sub+"<br>")});w.document.write("<hr>Total: K"+total+"<br>Thank you!");w.print()}
+
+function downloadPDF(){if(lastReceipt.length===0){alert("No receipt");return}const {{ jsPDF }}=window.jspdf;let doc=new jsPDF();let y=10;doc.setFontSize(14);doc.text("Lucky Bee POS Receipt",10,y);y+=10;let total=0;lastReceipt.forEach(c=>{let sub=c.price*c.qty;total+=sub;doc.text(`${c.name} x${c.qty} = K${sub}`,10,y);y+=8});doc.text(`Total: K${total}`,10,y);doc.save("receipt.pdf")}
+
+function drawChart(){let ctx=document.getElementById("salesChart");new Chart(ctx,{type:'bar',data:{labels:sales.map((_,i)=>"Sale "+(i+1)),datasets:[{label:"Sales K",data:sales,backgroundColor:'#2563eb'}]},options:{responsive:true,plugins:{legend:{display:false}}}})}
+
+function updateReports(){let daily=0,weekly=0;let today=new Date().toDateString();let week=new Date().getWeekNumber();sales.forEach(s=>{daily+=s;weekly+=s});dailyTotal.innerText=daily;weeklyTotal.innerText=weekly}
+
+// Helper to get week number
+Date.prototype.getWeekNumber=function(){let d=new Date(this.getFullYear(),0,1);return Math.ceil((((this - d)/86400000)+d.getDay()+1)/7)}
+</script></body>
+</html>
